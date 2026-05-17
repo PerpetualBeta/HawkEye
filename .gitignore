@@ -1,0 +1,18 @@
+# Build artefacts
+HawkEye.app
+HawkEye.app.dSYM/
+_BuildOutput/
+build/
+
+# Stamped Info.plist
+Info.plist.bak
+
+# macOS junk
+.DS_Store
+
+# Iconset PNGs — derived from generate_icon.swift; only the .icns is canonical
+Resources/HawkEye.iconset/
+
+# Don't accidentally commit a Sparkle.framework copy; it ships from jorvik-release.
+# (Keep this as a directory ignore; release.mk re-embeds from the vendored copy.)
+Sparkle.framework

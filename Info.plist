@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>cc.jorviksoftware.HawkEye</string>
+    <key>CFBundleName</key>
+    <string>HawkEye</string>
+    <key>CFBundleDisplayName</key>
+    <string>HawkEye</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>HawkEye</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <!-- Menu-bar utility: no Dock icon, no app-switcher entry. -->
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <!-- Shown in the TCC prompt when HawkEye first requests Screen
+         Recording permission. The hotkey-triggered capture path takes
+         a shot of the active display via ScreenCaptureKit. -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>HawkEye captures the active display so you can draw a magnifier callout over an area of it.</string>
+    <!-- Sparkle 2.x configuration. SUPublicEDKey is the shared Jorvik
+         developer EdDSA public key — the private half lives in the user
+         keychain and signs every Jorvik release via sign_update. Same
+         key as CopyLens, Rainy Day, the rest of the suite. -->
+    <key>SUFeedURL</key>
+    <string>https://jorviksoftware.cc/appcasts/hawkeye.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>zVc7rs8EiLmlDAYpgaIItjnHtsCkvyVVub+I0/sSb3Q=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+</dict>
+</plist>
