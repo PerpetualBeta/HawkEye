@@ -11,9 +11,10 @@ enum CalloutGeometry {
     }
 
     /// Compute the endpoints of the connector arrow between the source
-    /// rectangle and the callout. Tail sits on the edge of `source`,
-    /// head sits on the edge of `callout`, both on the sides facing each
-    /// other. Falls back to the nearest edges if the rectangles overlap.
+    /// rectangle and the callout. Both endpoints sit at the **midpoint**
+    /// of the edge of their respective rectangle that faces the other —
+    /// gives a clean, predictable visual where the arrow always meets a
+    /// rectangle at the centre of its near side.
     static func arrow(from source: CGRect, to callout: CGRect)
         -> (tail: CGPoint, head: CGPoint, tailSide: Side, headSide: Side)
     {
@@ -23,13 +24,13 @@ enum CalloutGeometry {
         let tailSide = side(of: source, towards: dstCenter)
         let headSide = side(of: callout, towards: srcCenter)
 
-        let tail = edgePoint(on: source, side: tailSide, towards: dstCenter)
-        let head = edgePoint(on: callout, side: headSide, towards: srcCenter)
+        let tail = edgeMidpoint(on: source, side: tailSide)
+        let head = edgeMidpoint(on: callout, side: headSide)
         return (tail, head, tailSide, headSide)
     }
 
     /// Pick the side of `rect` that faces `target`.
-    private static func side(of rect: CGRect, towards target: CGPoint) -> Side {
+    static func side(of rect: CGRect, towards target: CGPoint) -> Side {
         let dx = target.x - rect.midX
         let dy = target.y - rect.midY
         // Compare absolute deltas scaled by half-width/half-height so a
@@ -43,23 +44,25 @@ enum CalloutGeometry {
         }
     }
 
-    /// Point on the chosen side of `rect`, x/y clamped to the projection
-    /// of `target` along the chosen edge.
-    private static func edgePoint(on rect: CGRect, side: Side, towards target: CGPoint) -> CGPoint {
+    /// Midpoint of the named edge of `rect`. Used as the arrow anchor
+    /// at both ends — see the comment on `arrow(from:to:)`.
+    static func edgeMidpoint(on rect: CGRect, side: Side) -> CGPoint {
         switch side {
-        case .top:
-            let x = min(max(target.x, rect.minX), rect.maxX)
-            return CGPoint(x: x, y: rect.minY)
-        case .bottom:
-            let x = min(max(target.x, rect.minX), rect.maxX)
-            return CGPoint(x: x, y: rect.maxY)
-        case .left:
-            let y = min(max(target.y, rect.minY), rect.maxY)
-            return CGPoint(x: rect.minX, y: y)
-        case .right:
-            let y = min(max(target.y, rect.minY), rect.maxY)
-            return CGPoint(x: rect.maxX, y: y)
+        case .top:    return CGPoint(x: rect.midX, y: rect.minY)
+        case .bottom: return CGPoint(x: rect.midX, y: rect.maxY)
+        case .left:   return CGPoint(x: rect.minX, y: rect.midY)
+        case .right:  return CGPoint(x: rect.maxX, y: rect.midY)
         }
+    }
+
+    /// Midpoint of the edge of `rect` that faces `target`. Used when
+    /// the arrow head has been user-positioned to an arbitrary point —
+    /// the tail still anchors at a clean midpoint of the callout's
+    /// near edge, but which edge is chosen depends on where the user
+    /// has pulled the head to.
+    static func calloutAnchor(of rect: CGRect, towards target: CGPoint) -> CGPoint {
+        let s = side(of: rect, towards: target)
+        return edgeMidpoint(on: rect, side: s)
     }
 
     /// Initial callout placement next to a freshly-drawn source rectangle.
@@ -131,6 +134,50 @@ enum CalloutGeometry {
             .bottomLeft:  CGPoint(x: rect.minX, y: rect.maxY),
             .bottomRight: CGPoint(x: rect.maxX, y: rect.maxY),
         ]
+    }
+
+    /// Resize `rect` aspect-locked: the opposite corner stays put and
+    /// the dragged corner is constrained so the resulting rectangle has
+    /// `aspect` (= width / height). Used for the callout, whose aspect
+    /// must match the source selection so the magnified content never
+    /// distorts. Caller clamps for image bounds.
+    static func aspectLockedResize(_ rect: CGRect, corner: Corner, to point: CGPoint,
+                                    aspect: CGFloat, minSide: CGFloat = 20) -> CGRect
+    {
+        // Anchor = the diagonally-opposite corner of the rectangle —
+        // stays put as the user drags the chosen corner.
+        let anchor: CGPoint
+        switch corner {
+        case .topLeft:     anchor = CGPoint(x: rect.maxX, y: rect.maxY)
+        case .topRight:    anchor = CGPoint(x: rect.minX, y: rect.maxY)
+        case .bottomLeft:  anchor = CGPoint(x: rect.maxX, y: rect.minY)
+        case .bottomRight: anchor = CGPoint(x: rect.minX, y: rect.minY)
+        }
+
+        var w = abs(point.x - anchor.x)
+        var h = abs(point.y - anchor.y)
+
+        // Aspect lock: take the dominant proposed dimension and recompute
+        // the other from `aspect`. "Dominant" = whichever proposed
+        // dimension is larger relative to `aspect` — keeps the dragged
+        // corner tracking the mouse along its longer axis.
+        if w / max(h, 0.001) > aspect {
+            h = w / aspect
+        } else {
+            w = h * aspect
+        }
+
+        // Floor at minSide, preserving aspect.
+        if w < minSide { w = minSide; h = w / aspect }
+        if h < minSide { h = minSide; w = h * aspect }
+
+        // Direction from anchor: width extends away on the side opposite
+        // to the anchor (which is on the far side from the dragged corner).
+        let widthExtendsLeft = (corner == .topLeft || corner == .bottomLeft)
+        let heightExtendsUp  = (corner == .topLeft || corner == .topRight)
+        let originX = widthExtendsLeft ? anchor.x - w : anchor.x
+        let originY = heightExtendsUp  ? anchor.y - h : anchor.y
+        return CGRect(x: originX, y: originY, width: w, height: h)
     }
 
     /// Resize `rect` by moving the named corner to `point`. Maintains a
