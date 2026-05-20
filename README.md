@@ -1,6 +1,6 @@
 # HawkEye
 
-A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick a source rectangle, drag the callout box to reposition it, drag the corners to resize. A high-contrast arrow keeps the callout visually anchored to its source. Save the result as a flat PNG.
+A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick a source rectangle and a rounded callout appears, showing that region magnified, joined to its source by a tapered pointer that grows out of the callout's edge as if it were part of the same shape. Save the result as a flat PNG.
 
 ## Two entry points
 
@@ -10,11 +10,25 @@ A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick
 ## In the editor
 
 - Drag on the image to define the source rectangle.
-- A callout box is auto-placed next to it, showing a magnified copy of the source area.
-- Drag the callout body to reposition it, drag its corners to resize it.
-- Drag the source rectangle's body or corners to retarget — the callout re-magnifies automatically.
-- Click empty image area to start a fresh selection.
-- **Save Image…** (`⌘S`) writes a flat PNG at the source image's native pixel resolution.
+- A rounded, drop-shadowed callout is auto-placed next to it, showing the source area magnified.
+- The callout's pointer is a tapered wedge that's part of the same silhouette — one shape, one drop shadow, no separate arrow graphic.
+- Drag the callout body to reposition it; drag its corners to resize. The callout's aspect ratio is locked to the selection's, so the magnified content never distorts.
+- Drag the source rectangle's body or corners to retarget — the callout re-magnifies, and its aspect snaps to match.
+- Drag the **pointer tip** to retarget the wedge at any point in the image; the tail rotates automatically to exit the callout from whichever side faces the tip. The selection marquee + handles fade out while you're placing the tip so nothing obstructs your aim.
+- Click in empty image space without dragging is a no-op — your existing annotation isn't destroyed. Drag with motion to start a fresh selection.
+- Press **Escape** (or `⌘.`) to clear the current annotation and start over.
+- **Save Image…** (`⌘S`) writes a flat PNG at the source image's native pixel resolution. The selection marquee is editor-only — it doesn't appear in the saved file.
+
+## Editor controls
+
+The action bar at the bottom of the editor window:
+
+- **Arrow colour** — system colour picker. Drives the wedge fill, the selection marquee, and the resize-handle rings so the annotation reads as one palette. Live (continuous) update.
+- **Thickness** — slider, 2–24 image-pixels. Controls the pointer's base width.
+- **Reset** — clears selection, callout, and any user-positioned pointer tip.
+- **Save Image…** (`⌘S`) — flatten and write.
+
+Both the colour and the thickness are persisted to `UserDefaults`, so the next time you open the editor you start with the same arrow settings.
 
 ## Menu
 

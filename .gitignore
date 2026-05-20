@@ -1,7 +1,7 @@
 # Build artefacts
 HawkEye.app
 HawkEye.app.dSYM/
-_BuildOutput/
+.build/
 build/
 
 # Stamped Info.plist
