@@ -31,13 +31,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
                                        keyEquivalent: "")
         super.init()
 
-        if let button = item.button {
-            // Template-style SF Symbol for the menu-bar glyph. The bundle
-            // icon does the heavy artwork; the status item just needs a
-            // small monochrome shape that adapts to light/dark menu bars.
-            button.image = NSImage(systemSymbolName: "plus.magnifyingglass",
-                                    accessibilityDescription: "HawkEye")
-            button.image?.isTemplate = true
+        applyIcon()
+
+        // Redraw the status icon when the display configuration changes — the
+        // menu bar's effective thickness can shrink (e.g. moving from a notched
+        // display to an external one) and leave the pre-rendered glyph cropped.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.applyIcon()
         }
 
         let menu = NSMenu()
@@ -83,6 +86,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
                      keyEquivalent: "q")
 
         item.menu = menu
+    }
+
+    /// Template-style SF Symbol for the menu-bar glyph. The bundle icon
+    /// does the heavy artwork; the status item just needs a small
+    /// monochrome shape that adapts to light/dark menu bars.
+    private func applyIcon() {
+        guard let button = item.button else { return }
+        button.image = NSImage(systemSymbolName: "plus.magnifyingglass",
+                                accessibilityDescription: "HawkEye")
+        button.image?.isTemplate = true
     }
 
     // MARK: - NSMenuDelegate
