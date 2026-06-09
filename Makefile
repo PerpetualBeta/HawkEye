@@ -25,9 +25,7 @@ SWIFT_SOURCES    := App/main.swift App/AppDelegate.swift \
                     App/HUDWindow.swift \
                     App/HawkEyeSettings.swift App/SparkleDelegate.swift \
                     App/Log.swift \
-                    App/JorvikKit/JorvikAboutView.swift App/JorvikKit/JorvikWindowHelper.swift \
-                    App/JorvikKit/JorvikSettingsView.swift \
-                    App/JorvikKit/JorvikStatusItemVisibility.swift
+                    $(wildcard App/JorvikKit/*.swift)
 
 EMBEDDED_FRAMEWORKS := Sparkle
 ENTITLEMENTS        := HawkEye.entitlements
