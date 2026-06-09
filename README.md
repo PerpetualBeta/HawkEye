@@ -39,7 +39,10 @@ About · Capture Active Display · Load Image… · Settings… · Check for Upd
 - **Screen Recording** — required for the hotkey capture path. Loading from disk doesn't need it.
 - **Capture hotkey** — recorder field; defaults to Hyper-H. Cleared with the ✕ button.
 - **Show feedback HUD** — toggles the post-save toast.
+- **Show icon in menu bar** — hide the HawkEye status icon while the app keeps running (still reachable via its keyboard shortcut). Your choice persists across launches, including login auto-start. *Shown only on macOS 14–15; on macOS 26 (Tahoe) and later, use System Settings → Menu Bar, which provides this natively.*
 - **Launch at Login** — standard `SMAppService` toggle.
+
+If you've hidden the status icon and want it back, simply re-open HawkEye from your Applications folder — it reappears immediately.
 
 ## Privacy
 
