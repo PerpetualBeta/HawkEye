@@ -2,7 +2,7 @@ import Cocoa
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private var statusItem: StatusItem!
+    private var statusItem: StatusItem?
     private var hotkey: HotkeyManager!
     private var capture: CaptureCoordinator!
     private var sparkleDelegate: SparkleDelegate?
@@ -15,6 +15,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sparkleDelegate = SparkleDelegate()
         sparkleDelegate?.start()
 
+        createStatusItem()
+
+        // Create or remove the status item when the user toggles its
+        // visibility in Settings. The helper owns no UI of its own, so the
+        // AppDelegate creates/destroys the whole StatusItem object.
+        NotificationCenter.default.addObserver(
+            forName: JorvikStatusItemVisibility.didChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.applyStatusItemVisibility()
+        }
+
+        hotkey = HotkeyManager()
+        registerCaptureHotkey()
+    }
+
+    // MARK: - Status item lifecycle
+
+    /// Builds the menu-bar status item, but only when the user hasn't hidden
+    /// it. Callable again (e.g. from `applyStatusItemVisibility()`) after a
+    /// relaunch restores visibility.
+    private func createStatusItem() {
+        guard JorvikStatusItemVisibility.isVisible else { return }
         statusItem = StatusItem(
             onCapture:         { [weak self] in self?.beginCapture(source: "menu") },
             onLoadImage:       { [weak self] in self?.capture.loadImage() },
@@ -22,9 +45,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onOpenAbout:       { Self.openAbout() },
             onCheckForUpdates: { [weak self] in self?.sparkleDelegate?.checkForUpdates() }
         )
+    }
 
-        hotkey = HotkeyManager()
-        registerCaptureHotkey()
+    /// Reconciles the live status item with the persisted visibility flag.
+    private func applyStatusItemVisibility() {
+        if JorvikStatusItemVisibility.isVisible {
+            if statusItem == nil { createStatusItem() }
+        } else {
+            statusItem = nil
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        JorvikStatusItemVisibility.handleReopen()
+        return true
     }
 
     // MARK: - Capture

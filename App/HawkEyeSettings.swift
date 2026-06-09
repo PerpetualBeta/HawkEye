@@ -50,6 +50,8 @@ struct HawkEyeSettings: View {
                 .foregroundStyle(.secondary)
         }
 
+        MenuBarVisibilitySettings()
+
         Section("Capture") {
             HStack {
                 Text("Hotkey")

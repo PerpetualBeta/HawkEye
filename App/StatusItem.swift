@@ -88,6 +88,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         item.menu = menu
     }
 
+    /// Remove the underlying `NSStatusItem` from the menu bar when this
+    /// wrapper is torn down (e.g. the user hides the icon in Settings).
+    /// Without this the system would leave the slot occupied.
+    deinit {
+        NSStatusBar.system.removeStatusItem(item)
+    }
+
     /// Template-style SF Symbol for the menu-bar glyph. The bundle icon
     /// does the heavy artwork; the status item just needs a small
     /// monochrome shape that adapts to light/dark menu bars.
