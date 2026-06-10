@@ -129,6 +129,13 @@ final class EditorCanvas: NSView {
         didSet { if isHoveringSelection != oldValue { needsDisplay = true } }
     }
 
+    /// The rubber-band rectangle while a *new* selection is being dragged.
+    /// Kept separate from the committed `selection`/`callout` so dragging (or
+    /// a stray click) in empty space doesn't destroy an existing callout —
+    /// the existing annotation is only replaced once a valid new selection is
+    /// committed on mouse-up. `nil` when not drawing a new selection.
+    private var draftSelection: CGRect?
+
     /// True while the user is actively dragging the arrow head. The
     /// editor hides selection chrome (marquee + corner handles) during
     /// this drag so the user can place the tip precisely.
@@ -143,7 +150,7 @@ final class EditorCanvas: NSView {
     /// in the saved image regardless).
     private var isManipulatingSelection: Bool {
         switch dragMode {
-        case .newSelection, .moveSelection, .resizeSelection: return true
+        case .moveSelection, .resizeSelection: return true
         default: return false
         }
     }
@@ -175,6 +182,7 @@ final class EditorCanvas: NSView {
         self.selection = .null
         self.callout = .null
         self.arrowHeadAnchor = nil
+        self.draftSelection = nil
         needsDisplay = true
         onStateChanged?()
     }
@@ -305,18 +313,21 @@ final class EditorCanvas: NSView {
         // overlays any stray crossing — though `initialCallout`
         // places the callout outside the selection so they shouldn't
         // typically intersect.
-        if hasSelection && (isManipulatingSelection || isHoveringSelection) {
-            drawSelection(in: ctx, layout: l)
+        if let draft = draftSelection {
+            // Drawing a new selection: show the rubber-band; the existing
+            // callout (if any) is hidden for the duration and restored if the
+            // draft turns out too small to commit.
+            drawMarquee(draft, in: ctx, layout: l)
+        } else if hasSelection && (isManipulatingSelection || isHoveringSelection) {
+            drawMarquee(selection, in: ctx, layout: l)
         }
-        if hasCallout {
+        if hasCallout && draftSelection == nil {
             drawCalloutWithPointer(in: ctx, layout: l)
         }
     }
 
-    private func drawSelection(in ctx: CGContext, layout l: Layout) {
-        if isDraggingArrowHead { return }
-
-        let viewRect = imageToView(selection, layout: l)
+    private func drawMarquee(_ imageRect: CGRect, in ctx: CGContext, layout l: Layout) {
+        let viewRect = imageToView(imageRect, layout: l)
 
         // A fine, fixed hairline — deliberately decoupled from arrowLineWidth
         // so a thick pointer doesn't drag a heavy marquee along with it.
@@ -492,16 +503,13 @@ final class EditorCanvas: NSView {
             let viewDistance = sqrt(dxImg * dxImg + dyImg * dyImg) * l.scale
             if !committed {
                 if viewDistance < newSelectionCommitThreshold { return }
-                callout = .null
-                selection = .null
-                arrowHeadAnchor = nil
                 dragMode = .newSelection(startImagePoint: start, committed: true)
             }
             let clamped = clampPoint(imagePoint, to: imageBounds)
-            selection = CGRect(x: min(start.x, clamped.x),
-                                y: min(start.y, clamped.y),
-                                width: abs(clamped.x - start.x),
-                                height: abs(clamped.y - start.y))
+            draftSelection = CGRect(x: min(start.x, clamped.x),
+                                    y: min(start.y, clamped.y),
+                                    width: abs(clamped.x - start.x),
+                                    height: abs(clamped.y - start.y))
 
         case .moveSelection(let start, let orig):
             let dx = imagePoint.x - start.x
@@ -549,14 +557,17 @@ final class EditorCanvas: NSView {
         }
         guard let mode = dragMode else { return }
         if case .newSelection(_, let committed) = mode {
-            guard committed else { return }
-            if selection.width > 6 && selection.height > 6 {
+            // Only replace the existing annotation if a real new rectangle was
+            // drawn. A bare click or a tiny accidental drag leaves the current
+            // selection + callout untouched.
+            if committed, let draft = draftSelection, draft.width > 6, draft.height > 6 {
+                selection = draft
                 callout = CalloutGeometry.initialCallout(for: selection,
                                                           in: CGSize(width: image.width,
                                                                      height: image.height))
-            } else {
-                selection = .null
+                arrowHeadAnchor = nil
             }
+            draftSelection = nil
             needsDisplay = true
         }
     }
@@ -788,6 +799,7 @@ final class EditorCanvas: NSView {
         selection = .null
         callout = .null
         arrowHeadAnchor = nil
+        draftSelection = nil
         needsDisplay = true
         onStateChanged?()
     }
