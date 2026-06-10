@@ -54,6 +54,22 @@ final class EditorCanvas: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// When true, the pointer colour is auto-derived from the magnified
+    /// content each time the selection changes (see `suggestedArrowColor`),
+    /// so the wedge reads as an extension of the callout's own palette.
+    /// The user can switch this off and pick a colour manually. Turning it
+    /// back on recomputes immediately for the current selection.
+    var autoArrowColor: Bool = true {
+        didSet {
+            if autoArrowColor { recomputeAutoColor() }
+            needsDisplay = true   // add/remove the manual-mode bubble outline
+        }
+    }
+
+    /// Fired when auto mode picks a new colour, so the window can reflect it
+    /// in the colour well. Not persisted — auto colours are derived, not stored.
+    var onArrowColorAutoUpdated: ((NSColor) -> Void)?
+
     /// Notified after each interaction so the window can enable/disable
     /// the Save button.
     var onStateChanged: (() -> Void)?
@@ -64,8 +80,11 @@ final class EditorCanvas: NSView {
     private let calloutShadowOffset: CGFloat = 8
     private let calloutShadowBlur: CGFloat = 20
 
-    private let handleRadius: CGFloat = 6
-    private let selectionLineDash: [CGFloat] = [7, 5]
+    /// Invisible grab margin (view-space points) around each corner for
+    /// resize hit-testing. Replaces the old visible handle dots — resize is
+    /// now signalled by the cursor (diagonal arrow on hover), not chrome.
+    private let cornerGrabSlop: CGFloat = 11
+    private let selectionLineDash: [CGFloat] = [4, 3]
 
     /// Half the wedge's base width, as a multiple of `arrowLineWidth`.
     /// 1.75× gives a base that reads as a proper pointer at the
@@ -77,6 +96,11 @@ final class EditorCanvas: NSView {
     /// pointer/callout join seamless. Scales with thickness so very
     /// thin pointers don't push deep into the magnified content.
     private let wedgeInsetMultiplier: CGFloat = 0.5
+
+    /// Width of the manual-mode bubble outline, in image-pixel units. Tied
+    /// loosely to the pointer thickness so the frame stays proportionate to
+    /// the wedge it continues from (~2px at the default thickness).
+    private var calloutBorderWidthImage: CGFloat { max(2, arrowLineWidth * 0.25) }
 
     // MARK: - Drag tracking
 
@@ -97,12 +121,31 @@ final class EditorCanvas: NSView {
 
     private let newSelectionCommitThreshold: CGFloat = 4
 
+    /// True while the pointer is hovering over the (committed) source
+    /// selection at rest. Brings the marquee back so the user can see and
+    /// grab the source region without it cluttering the view the rest of
+    /// the time.
+    private var isHoveringSelection = false {
+        didSet { if isHoveringSelection != oldValue { needsDisplay = true } }
+    }
+
     /// True while the user is actively dragging the arrow head. The
     /// editor hides selection chrome (marquee + corner handles) during
     /// this drag so the user can place the tip precisely.
     private var isDraggingArrowHead: Bool {
         if case .dragArrowHead = dragMode { return true }
         return false
+    }
+
+    /// True only while the user is actively drawing, moving, or resizing the
+    /// source selection. The dashed marquee is drawn only then — at rest the
+    /// editor shows just the callout + pointer (and the marquee never appears
+    /// in the saved image regardless).
+    private var isManipulatingSelection: Bool {
+        switch dragMode {
+        case .newSelection, .moveSelection, .resizeSelection: return true
+        default: return false
+        }
     }
 
     // MARK: - Init
@@ -262,7 +305,7 @@ final class EditorCanvas: NSView {
         // overlays any stray crossing — though `initialCallout`
         // places the callout outside the selection so they shouldn't
         // typically intersect.
-        if hasSelection {
+        if hasSelection && (isManipulatingSelection || isHoveringSelection) {
             drawSelection(in: ctx, layout: l)
         }
         if hasCallout {
@@ -275,13 +318,13 @@ final class EditorCanvas: NSView {
 
         let viewRect = imageToView(selection, layout: l)
 
-        ctx.setStrokeColor(arrowColor.withAlphaComponent(0.85).cgColor)
-        ctx.setLineWidth(max(1.5, arrowLineWidth * l.scale * 0.35))
+        // A fine, fixed hairline — deliberately decoupled from arrowLineWidth
+        // so a thick pointer doesn't drag a heavy marquee along with it.
+        ctx.setStrokeColor(arrowColor.withAlphaComponent(0.9).cgColor)
+        ctx.setLineWidth(1)
         ctx.setLineDash(phase: 0, lengths: selectionLineDash)
         ctx.stroke(viewRect)
         ctx.setLineDash(phase: 0, lengths: [])
-
-        drawHandles(rect: viewRect, in: ctx, ring: arrowColor)
     }
 
     private func drawCalloutWithPointer(in ctx: CGContext, layout l: Layout) {
@@ -356,20 +399,18 @@ final class EditorCanvas: NSView {
         }
         ctx.restoreGState()
 
-        if !isDraggingArrowHead {
-            drawHandles(rect: viewRect, in: ctx, ring: arrowColor)
-        }
-    }
-
-    private func drawHandles(rect: CGRect, in ctx: CGContext, ring: NSColor) {
-        let r = handleRadius
-        for p in CalloutGeometry.handlePoints(of: rect).values {
-            let dot = CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)
-            ctx.setFillColor(NSColor.white.cgColor)
-            ctx.fillEllipse(in: dot)
-            ctx.setStrokeColor(ring.cgColor)
-            ctx.setLineWidth(2)
-            ctx.strokeEllipse(in: dot)
+        // Step 4 (manual colour only) — outline the bubble in arrowColor so
+        // the same-coloured wedge reads as one shape with it. The segment of
+        // this outline under the wedge base is the wedge's own colour, so the
+        // join stays seamless. Auto mode skips this: its wedge already
+        // matches the content at the extrusion edge.
+        if !autoArrowColor {
+            ctx.saveGState()
+            ctx.addPath(roundedPath)
+            ctx.setStrokeColor(arrowColor.cgColor)
+            ctx.setLineWidth(max(1.5, calloutBorderWidthImage * l.scale))
+            ctx.strokePath()
+            ctx.restoreGState()
         }
     }
 
@@ -379,7 +420,7 @@ final class EditorCanvas: NSView {
         -> CalloutGeometry.Corner?
     {
         let viewRect = imageToView(rect, layout: l)
-        let slop = handleRadius + 2
+        let slop = cornerGrabSlop
         for (corner, p) in CalloutGeometry.handlePoints(of: viewRect) {
             if abs(p.x - point.x) <= slop && abs(p.y - point.y) <= slop {
                 return corner
@@ -403,7 +444,7 @@ final class EditorCanvas: NSView {
             let dx = viewPoint.x - viewHead.x
             let dy = viewPoint.y - viewHead.y
             let viewLineWidth = max(2, arrowLineWidth * l.scale)
-            let hitRadius = max(handleRadius * 2, viewLineWidth * 2)
+            let hitRadius = max(12, viewLineWidth * 2)
             if sqrt(dx * dx + dy * dy) <= hitRadius {
                 dragMode = .dragArrowHead
                 return
@@ -492,14 +533,19 @@ final class EditorCanvas: NSView {
         case .dragArrowHead:
             arrowHeadAnchor = clampPoint(imagePoint, to: imageBounds)
         }
+        dragCursor(for: mode).set()
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
         defer {
             dragMode = nil
+            if autoArrowColor { recomputeAutoColor() }
             needsDisplay = true
             onStateChanged?()
+            // Restore the hover cursor for wherever the pointer ended up.
+            NSCursor.arrow.set()
+            hoverCursor(atView: convert(event.locationInWindow, from: nil)).set()
         }
         guard let mode = dragMode else { return }
         if case .newSelection(_, let committed) = mode {
@@ -516,6 +562,180 @@ final class EditorCanvas: NSView {
     }
 
     override func resetCursorRects() { }
+
+    // MARK: - Cursor hints
+    //
+    // Resize/move is discoverable via the cursor rather than visible
+    // handles: a diagonal resize arrow at the corners, an open hand over a
+    // draggable body or the arrow head, the arrow elsewhere. The editor
+    // window is active and key, so manual cursor management (a .mouseMoved
+    // tracking area + NSCursor.set) is reliable here.
+
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let ta = trackingArea { removeTrackingArea(ta) }
+        let ta = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(ta)
+        trackingArea = ta
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard dragMode == nil else { return }
+        let viewPoint = convert(event.locationInWindow, from: nil)
+        hoverCursor(atView: viewPoint).set()
+
+        // Reveal the marquee when the pointer is over the source region or
+        // one of its corners.
+        let l = currentLayout()
+        let overBody = !selection.isNull && selection.contains(viewToImage(viewPoint, layout: l))
+        let overCorner = !selection.isNull && corner(of: selection, atView: viewPoint, layout: l) != nil
+        isHoveringSelection = overBody || overCorner
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.arrow.set()
+        isHoveringSelection = false
+    }
+
+    /// The cursor to show when hovering (no drag in progress), mirroring the
+    /// hit-test priority used in `mouseDown`.
+    private func hoverCursor(atView viewPoint: CGPoint) -> NSCursor {
+        let l = currentLayout()
+
+        if let (_, head) = currentArrowEndpoints() {
+            let viewHead = imageToView(head, layout: l)
+            let dx = viewPoint.x - viewHead.x
+            let dy = viewPoint.y - viewHead.y
+            let viewLineWidth = max(2, arrowLineWidth * l.scale)
+            let hitRadius = max(12, viewLineWidth * 2)
+            if sqrt(dx * dx + dy * dy) <= hitRadius { return .openHand }
+        }
+        if !callout.isNull {
+            if let c = corner(of: callout, atView: viewPoint, layout: l) { return diagonalCursor(for: c) }
+            if callout.contains(viewToImage(viewPoint, layout: l)) { return .openHand }
+        }
+        if !selection.isNull {
+            if let c = corner(of: selection, atView: viewPoint, layout: l) { return diagonalCursor(for: c) }
+            if selection.contains(viewToImage(viewPoint, layout: l)) { return .openHand }
+        }
+        return .arrow
+    }
+
+    private func dragCursor(for mode: DragMode) -> NSCursor {
+        switch mode {
+        case .resizeSelection(let c, _), .resizeCallout(let c, _): return diagonalCursor(for: c)
+        case .newSelection: return .crosshair
+        default: return .closedHand
+        }
+    }
+
+    private func diagonalCursor(for corner: CalloutGeometry.Corner) -> NSCursor {
+        switch corner {
+        case .topLeft, .bottomRight: return .resizeDiagonalNWSE
+        case .topRight, .bottomLeft: return .resizeDiagonalNESW
+        }
+    }
+
+    // MARK: - Auto pointer colour
+
+    /// Recompute and apply the auto pointer colour for the current
+    /// selection, notifying the window so the colour well reflects it.
+    /// No-op when there's no usable selection.
+    private func recomputeAutoColor() {
+        guard autoArrowColor, let c = suggestedArrowColor() else { return }
+        arrowColor = c
+        onArrowColorAutoUpdated?(c)
+    }
+
+    /// Derive a pointer colour from the magnified content, biased to the
+    /// strip along the callout edge the wedge extrudes from — so the wedge
+    /// reads as a continuation of the bubble's edge rather than a clashing
+    /// accent. Falls back to the whole-selection average if the edge strip
+    /// can't be sampled. `nil` when there's no usable selection.
+    func suggestedArrowColor() -> NSColor? {
+        guard !selection.isNull, selection.width >= 2, selection.height >= 2 else { return nil }
+
+        // The callout shows the selection scaled uniformly, so the callout
+        // edge the wedge grows from maps to the same-named edge of the crop.
+        let side: CalloutGeometry.Side? = {
+            guard let (_, head) = currentArrowEndpoints(),
+                  !callout.isNull, callout.width > 0, callout.height > 0,
+                  !callout.insetBy(dx: -2, dy: -2).contains(head)
+            else { return nil }
+            return CalloutGeometry.side(of: callout, towards: head)
+        }()
+
+        if let side,
+           let crop = image.cropping(to: integralCrop(edgeStrip(of: selection, side: side, fraction: 0.28))),
+           let avg = Self.averageColor(of: crop) {
+            return Self.pointerColor(from: avg)
+        }
+        // Fallback: whole-selection average (e.g. head still inside callout).
+        if let full = image.cropping(to: integralCrop(selection)),
+           let avg = Self.averageColor(of: full) {
+            return Self.pointerColor(from: avg)
+        }
+        return nil
+    }
+
+    /// A band along one edge of `rect`, `fraction` of the rect's extent
+    /// across that edge. Image coordinates (y-down).
+    private func edgeStrip(of rect: CGRect, side: CalloutGeometry.Side, fraction: CGFloat) -> CGRect {
+        let f = max(0.05, min(0.5, fraction))
+        switch side {
+        case .top:    return CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * f)
+        case .bottom: return CGRect(x: rect.minX, y: rect.maxY - rect.height * f, width: rect.width, height: rect.height * f)
+        case .left:   return CGRect(x: rect.minX, y: rect.minY, width: rect.width * f, height: rect.height)
+        case .right:  return CGRect(x: rect.maxX - rect.width * f, y: rect.minY, width: rect.width * f, height: rect.height)
+        }
+    }
+
+    /// Box-average an image by rendering it into a 1×1 sRGB context.
+    /// Deterministic and fast — the single pixel is the area average.
+    private static func averageColor(of image: CGImage) -> NSColor? {
+        var px: [UInt8] = [0, 0, 0, 0]
+        let cs = CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8,
+                                  bytesPerRow: 4, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let a = CGFloat(px[3]) / 255
+        guard a > 0 else { return nil }
+        // Un-premultiply.
+        return NSColor(srgbRed: CGFloat(px[0]) / 255 / a,
+                       green: CGFloat(px[1]) / 255 / a,
+                       blue: CGFloat(px[2]) / 255 / a,
+                       alpha: 1)
+    }
+
+    /// Turn a sampled average into a confident pointer colour: a vivid
+    /// sibling of the dominant hue for colourful content, or a luminance-
+    /// matched graphite for near-greyscale content (text/UI screenshots,
+    /// where a literal average is a muddy mid-grey).
+    private static func pointerColor(from average: NSColor) -> NSColor {
+        let c = average.usingColorSpace(.sRGB) ?? average
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
+        c.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        if s < 0.18 {
+            // Near-neutral content (white / grey / black UI): match the
+            // bubble's own tone so the pointer reads as the same surface —
+            // a white bubble gets a white pointer. The drop shadow supplies
+            // edge definition against the background, so no contrast trick.
+            return c
+        }
+        let newS = min(1.0, max(0.65, s))
+        let newB = min(0.9, max(0.55, b))
+        return NSColor(hue: h, saturation: newS, brightness: newB, alpha: 1)
+    }
 
     // MARK: - Helpers
 
@@ -676,5 +896,37 @@ final class EditorCanvas: NSView {
             ctx.fill(cgCallout)
         }
         ctx.restoreGState()
+
+        // Step 4 (manual colour only) — bubble outline, matching the on-screen
+        // render. See the note there.
+        if !autoArrowColor {
+            ctx.saveGState()
+            ctx.addPath(roundedPath)
+            ctx.setStrokeColor(arrowColor.cgColor)
+            ctx.setLineWidth(calloutBorderWidthImage)
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+    }
+}
+
+// MARK: - Diagonal resize cursors
+//
+// macOS ships no *public* diagonal-resize cursor, but AppKit has long
+// carried private ones (the same arrows Finder and Preview use on window
+// and shape corners). We reach them by selector behind a guard, falling
+// back to the crosshair if a future macOS ever drops them — so the worst
+// case is a less-pretty but still-functional hint, never a crash.
+private extension NSCursor {
+    static var resizeDiagonalNWSE: NSCursor { diagonalCursor("_windowResizeNorthWestSouthEastCursor") }
+    static var resizeDiagonalNESW: NSCursor { diagonalCursor("_windowResizeNorthEastSouthWestCursor") }
+
+    static func diagonalCursor(_ selectorName: String) -> NSCursor {
+        let selector = NSSelectorFromString(selectorName)
+        if NSCursor.responds(to: selector),
+           let cursor = NSCursor.perform(selector)?.takeUnretainedValue() as? NSCursor {
+            return cursor
+        }
+        return .crosshair
     }
 }

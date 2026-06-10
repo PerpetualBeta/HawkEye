@@ -17,13 +17,15 @@ final class EditorWindow: NSWindowController {
     private var resetButton: NSButton!
     private var sourceLabel: NSTextField!
     private var arrowColorWell: NSColorWell!
+    private var arrowAutoColorCheckbox: NSButton!
     private var arrowThicknessSlider: NSSlider!
 
     // MARK: - UserDefaults keys + thickness range
 
     private enum Keys {
-        static let arrowColor = "HawkEye.arrow.color"          // [Double] sRGB rgba
-        static let arrowLineWidth = "HawkEye.arrow.lineWidth"  // Double, image-pixel units
+        static let arrowColor = "HawkEye.arrow.color"            // [Double] sRGB rgba
+        static let arrowLineWidth = "HawkEye.arrow.lineWidth"    // Double, image-pixel units
+        static let arrowAutoColor = "HawkEye.arrow.autoColor"    // Bool, default true
     }
 
     /// Slider range, in image-pixel units. Caps high enough for the
@@ -49,6 +51,10 @@ final class EditorWindow: NSWindowController {
         installContentView(sourceText: sourceText)
         applyPersistedArrowStyle()
         canvas.onStateChanged = { [weak self] in self?.refreshActions() }
+        // Auto mode picks a colour from the content — mirror it in the well.
+        canvas.onArrowColorAutoUpdated = { [weak self] color in
+            self?.arrowColorWell.color = color
+        }
         refreshActions()
     }
 
@@ -89,6 +95,16 @@ final class EditorWindow: NSWindowController {
         arrowColorWell.target = self
         arrowColorWell.action = #selector(arrowColorChanged)
 
+        // "Auto" derives the pointer colour from the magnified content. On
+        // by default; ticking it off enables the well for a manual override.
+        arrowAutoColorCheckbox = NSButton(checkboxWithTitle: "Auto",
+                                          target: self,
+                                          action: #selector(autoColorToggled))
+        arrowAutoColorCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        arrowAutoColorCheckbox.controlSize = .small
+        arrowAutoColorCheckbox.font = .systemFont(ofSize: 11, weight: .medium)
+        arrowAutoColorCheckbox.toolTip = "Match the pointer colour to the callout content"
+
         // Continuous slider — replaces the previous 3-option popup so
         // the user can dial in any thickness in the supported range.
         arrowThicknessSlider = NSSlider(value: Double(Self.arrowLineWidthDefault),
@@ -118,6 +134,7 @@ final class EditorWindow: NSWindowController {
         bar.addSubview(sourceLabel)
         bar.addSubview(arrowLabel)
         bar.addSubview(arrowColorWell)
+        bar.addSubview(arrowAutoColorCheckbox)
         bar.addSubview(arrowThicknessSlider)
         bar.addSubview(resetButton)
         bar.addSubview(saveButton)
@@ -147,7 +164,10 @@ final class EditorWindow: NSWindowController {
             arrowColorWell.widthAnchor.constraint(equalToConstant: 36),
             arrowColorWell.heightAnchor.constraint(equalToConstant: 22),
 
-            arrowThicknessSlider.leadingAnchor.constraint(equalTo: arrowColorWell.trailingAnchor, constant: 10),
+            arrowAutoColorCheckbox.leadingAnchor.constraint(equalTo: arrowColorWell.trailingAnchor, constant: 8),
+            arrowAutoColorCheckbox.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+
+            arrowThicknessSlider.leadingAnchor.constraint(equalTo: arrowAutoColorCheckbox.trailingAnchor, constant: 12),
             arrowThicknessSlider.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
             arrowThicknessSlider.widthAnchor.constraint(equalToConstant: 140),
 
@@ -188,6 +208,13 @@ final class EditorWindow: NSWindowController {
 
         arrowColorWell.color = color
         arrowThicknessSlider.doubleValue = Double(lineWidth)
+
+        // Auto colour is on by default; the well is disabled while it's on
+        // (it shows the derived colour) and enabled for a manual override.
+        let auto = Self.loadArrowAutoColor()
+        arrowAutoColorCheckbox.state = auto ? .on : .off
+        arrowColorWell.isEnabled = !auto
+        canvas.autoArrowColor = auto
     }
 
     private static func loadArrowColor() -> NSColor? {
@@ -220,6 +247,16 @@ final class EditorWindow: NSWindowController {
         UserDefaults.standard.set(Double(w), forKey: Keys.arrowLineWidth)
     }
 
+    private static func loadArrowAutoColor() -> Bool {
+        // Default true when never set.
+        guard UserDefaults.standard.object(forKey: Keys.arrowAutoColor) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: Keys.arrowAutoColor)
+    }
+
+    private static func saveArrowAutoColor(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: Keys.arrowAutoColor)
+    }
+
     // MARK: - Actions
 
     @objc private func resetTapped() {
@@ -244,6 +281,21 @@ final class EditorWindow: NSWindowController {
         let color = arrowColorWell.color
         canvas.arrowColor = color
         Self.saveArrowColor(color)
+    }
+
+    @objc private func autoColorToggled() {
+        let on = arrowAutoColorCheckbox.state == .on
+        Self.saveArrowAutoColor(on)
+        arrowColorWell.isEnabled = !on
+        // Setting this recomputes from the current selection when turning on
+        // (via the canvas didSet → onArrowColorAutoUpdated callback).
+        canvas.autoArrowColor = on
+        if !on {
+            // Manual: fall back to the colour currently shown in the well.
+            let color = arrowColorWell.color
+            canvas.arrowColor = color
+            Self.saveArrowColor(color)
+        }
     }
 
     @objc private func arrowThicknessChanged() {
