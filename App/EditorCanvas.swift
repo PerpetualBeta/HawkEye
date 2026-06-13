@@ -54,15 +54,16 @@ final class EditorCanvas: NSView {
         didSet { needsDisplay = true }
     }
 
-    /// When true, the pointer colour is auto-derived from the magnified
-    /// content each time the selection changes (see `suggestedArrowColor`),
-    /// so the wedge reads as an extension of the callout's own palette.
-    /// The user can switch this off and pick a colour manually. Turning it
-    /// back on recomputes immediately for the current selection.
+    /// When true, the pointer + border colour is auto-derived to make the
+    /// callout stand out from the **background image it sits on** — a subtle
+    /// accent that contrasts in luminance and complements the surrounding hue
+    /// (see `suggestedArrowColor`). Recomputed whenever the selection or
+    /// callout position changes. The user can switch this off and pick a
+    /// colour manually; turning it back on recomputes immediately.
     var autoArrowColor: Bool = true {
         didSet {
             if autoArrowColor { recomputeAutoColor() }
-            needsDisplay = true   // add/remove the manual-mode bubble outline
+            needsDisplay = true
         }
     }
 
@@ -410,19 +411,17 @@ final class EditorCanvas: NSView {
         }
         ctx.restoreGState()
 
-        // Step 4 (manual colour only) — outline the bubble in arrowColor so
-        // the same-coloured wedge reads as one shape with it. The segment of
-        // this outline under the wedge base is the wedge's own colour, so the
-        // join stays seamless. Auto mode skips this: its wedge already
-        // matches the content at the extrusion edge.
-        if !autoArrowColor {
-            ctx.saveGState()
-            ctx.addPath(roundedPath)
-            ctx.setStrokeColor(arrowColor.cgColor)
-            ctx.setLineWidth(max(1.5, calloutBorderWidthImage * l.scale))
-            ctx.strokePath()
-            ctx.restoreGState()
-        }
+        // Step 4 — outline the bubble in arrowColor so the same-coloured wedge
+        // reads as one shape with it. The segment of this outline under the
+        // wedge base is the wedge's own colour, so the join stays seamless.
+        // Drawn in both modes: the auto colour now contrasts with the
+        // background, so the border helps delineate the callout from the scene.
+        ctx.saveGState()
+        ctx.addPath(roundedPath)
+        ctx.setStrokeColor(arrowColor.cgColor)
+        ctx.setLineWidth(max(1.5, calloutBorderWidthImage * l.scale))
+        ctx.strokePath()
+        ctx.restoreGState()
     }
 
     // MARK: - Hit testing
@@ -665,47 +664,44 @@ final class EditorCanvas: NSView {
         onArrowColorAutoUpdated?(c)
     }
 
-    /// Derive a pointer colour from the magnified content, biased to the
-    /// strip along the callout edge the wedge extrudes from — so the wedge
-    /// reads as a continuation of the bubble's edge rather than a clashing
-    /// accent. Falls back to the whole-selection average if the edge strip
-    /// can't be sampled. `nil` when there's no usable selection.
+    /// Derive a pointer + border colour that makes the callout stand out from
+    /// the **background image it sits on** — a subtle accent that contrasts in
+    /// luminance and complements the surrounding hue, rather than echoing the
+    /// callout's own (potentially camouflaging) content. `nil` when there's no
+    /// usable callout to sample around.
     func suggestedArrowColor() -> NSColor? {
-        guard !selection.isNull, selection.width >= 2, selection.height >= 2 else { return nil }
-
-        // The callout shows the selection scaled uniformly, so the callout
-        // edge the wedge grows from maps to the same-named edge of the crop.
-        let side: CalloutGeometry.Side? = {
-            guard let (_, head) = currentArrowEndpoints(),
-                  !callout.isNull, callout.width > 0, callout.height > 0,
-                  !callout.insetBy(dx: -2, dy: -2).contains(head)
-            else { return nil }
-            return CalloutGeometry.side(of: callout, towards: head)
-        }()
-
-        if let side,
-           let crop = image.cropping(to: integralCrop(edgeStrip(of: selection, side: side, fraction: 0.28))),
-           let avg = Self.averageColor(of: crop) {
-            return Self.pointerColor(from: avg)
-        }
-        // Fallback: whole-selection average (e.g. head still inside callout).
-        if let full = image.cropping(to: integralCrop(selection)),
-           let avg = Self.averageColor(of: full) {
-            return Self.pointerColor(from: avg)
-        }
-        return nil
+        guard !callout.isNull, callout.width >= 2, callout.height >= 2,
+              let background = backgroundContextColor() else { return nil }
+        return Self.contrastingPointerColor(against: background)
     }
 
-    /// A band along one edge of `rect`, `fraction` of the rect's extent
-    /// across that edge. Image coordinates (y-down).
-    private func edgeStrip(of rect: CGRect, side: CalloutGeometry.Side, fraction: CGFloat) -> CGRect {
-        let f = max(0.05, min(0.5, fraction))
-        switch side {
-        case .top:    return CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * f)
-        case .bottom: return CGRect(x: rect.minX, y: rect.maxY - rect.height * f, width: rect.width, height: rect.height * f)
-        case .left:   return CGRect(x: rect.minX, y: rect.minY, width: rect.width * f, height: rect.height)
-        case .right:  return CGRect(x: rect.maxX - rect.width * f, y: rect.minY, width: rect.width * f, height: rect.height)
+    /// Average colour of the background ring immediately surrounding the
+    /// callout — the slice of the scene the annotation has to read against.
+    /// Samples the four bands just outside the callout edges (clamped to the
+    /// image) and means them; falls back to the whole image if the callout
+    /// fills it (no ring to sample).
+    private func backgroundContextColor() -> NSColor? {
+        let margin = max(24, min(callout.width, callout.height) * 0.35)
+        let imageRect = CGRect(x: 0, y: 0, width: CGFloat(image.width), height: CGFloat(image.height))
+        let bands = [
+            CGRect(x: callout.minX - margin, y: callout.minY - margin, width: callout.width + 2 * margin, height: margin), // above
+            CGRect(x: callout.minX - margin, y: callout.maxY,          width: callout.width + 2 * margin, height: margin), // below
+            CGRect(x: callout.minX - margin, y: callout.minY,          width: margin, height: callout.height),             // left
+            CGRect(x: callout.maxX,          y: callout.minY,          width: margin, height: callout.height),             // right
+        ]
+        var samples: [NSColor] = []
+        for band in bands {
+            let clipped = band.intersection(imageRect)
+            guard !clipped.isNull, clipped.width >= 1, clipped.height >= 1,
+                  let crop = image.cropping(to: integralCrop(clipped)),
+                  let avg = Self.averageColor(of: crop) else { continue }
+            samples.append(avg)
         }
+        if samples.isEmpty {
+            guard let crop = image.cropping(to: integralCrop(imageRect)) else { return nil }
+            return Self.averageColor(of: crop)
+        }
+        return Self.meanColor(samples)
     }
 
     /// Box-average an image by rendering it into a 1×1 sRGB context.
@@ -728,24 +724,43 @@ final class EditorCanvas: NSView {
                        alpha: 1)
     }
 
-    /// Turn a sampled average into a confident pointer colour: a vivid
-    /// sibling of the dominant hue for colourful content, or a luminance-
-    /// matched graphite for near-greyscale content (text/UI screenshots,
-    /// where a literal average is a muddy mid-grey).
-    private static func pointerColor(from average: NSColor) -> NSColor {
-        let c = average.usingColorSpace(.sRGB) ?? average
+    /// Mean of several sampled colours, in sRGB.
+    private static func meanColor(_ colors: [NSColor]) -> NSColor? {
+        guard !colors.isEmpty else { return nil }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        for colour in colors {
+            let s = colour.usingColorSpace(.sRGB) ?? colour
+            r += s.redComponent; g += s.greenComponent; b += s.blueComponent
+        }
+        let n = CGFloat(colors.count)
+        return NSColor(srgbRed: r / n, green: g / n, blue: b / n, alpha: 1)
+    }
+
+    /// Calm blue accent used when the background has no hue of its own (the
+    /// common grey/white UI-screenshot case) — so the callout still gets a
+    /// discernible colour instead of melting into the chrome.
+    private static let neutralAccentHue: CGFloat = 0.58
+
+    /// Pick a subtle accent the callout (wedge + border) reads clearly against
+    /// `background`. Luminance does the heavy lifting — a light accent on dark
+    /// scenes, a deeper one on light scenes — with a complementary hue when the
+    /// background is chromatic. Saturation stays moderate: discernible, never
+    /// gaudy. These four constants are the taste dials.
+    private static func contrastingPointerColor(against background: NSColor) -> NSColor {
+        let c = background.usingColorSpace(.sRGB) ?? background
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
         c.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        if s < 0.18 {
-            // Near-neutral content (white / grey / black UI): match the
-            // bubble's own tone so the pointer reads as the same surface —
-            // a white bubble gets a white pointer. The drop shadow supplies
-            // edge definition against the background, so no contrast trick.
-            return c
-        }
-        let newS = min(1.0, max(0.65, s))
-        let newB = min(0.9, max(0.55, b))
-        return NSColor(hue: h, saturation: newS, brightness: newB, alpha: 1)
+        let luminance = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
+
+        // Complement the background's hue when it has one; otherwise a calm
+        // default accent for neutral scenes.
+        let hue = s > 0.15 ? (h + 0.5).truncatingRemainder(dividingBy: 1.0) : neutralAccentHue
+        // Light backgrounds get a deeper, slightly richer accent; dark
+        // backgrounds get a brighter, lighter one. Moderate saturation either way.
+        let onLight = luminance >= 0.5
+        let saturation: CGFloat = onLight ? 0.60 : 0.50
+        let brightness: CGFloat = onLight ? 0.55 : 0.92
+        return NSColor(hue: hue, saturation: saturation, brightness: brightness, alpha: 1)
     }
 
     // MARK: - Helpers
@@ -909,16 +924,14 @@ final class EditorCanvas: NSView {
         }
         ctx.restoreGState()
 
-        // Step 4 (manual colour only) — bubble outline, matching the on-screen
-        // render. See the note there.
-        if !autoArrowColor {
-            ctx.saveGState()
-            ctx.addPath(roundedPath)
-            ctx.setStrokeColor(arrowColor.cgColor)
-            ctx.setLineWidth(calloutBorderWidthImage)
-            ctx.strokePath()
-            ctx.restoreGState()
-        }
+        // Step 4 — bubble outline, matching the on-screen render. See the note
+        // there. Drawn in both modes so the saved PNG carries the same border.
+        ctx.saveGState()
+        ctx.addPath(roundedPath)
+        ctx.setStrokeColor(arrowColor.cgColor)
+        ctx.setLineWidth(calloutBorderWidthImage)
+        ctx.strokePath()
+        ctx.restoreGState()
     }
 }
 
