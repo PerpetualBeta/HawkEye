@@ -64,6 +64,6 @@ Requires the shared [`jorvik-release`](https://github.com/PerpetualBeta/jorvik-r
 
 macOS 14 (Sonoma) or later.
 
-## License
+---
 
-Public domain. No rights reserved.
+HawkEye is provided by [Jorvik Software](https://jorviksoftware.cc/). If you find it useful, consider [buying me a coffee](https://jorviksoftware.cc/donate).
