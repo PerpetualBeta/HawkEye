@@ -2,6 +2,8 @@
 
 A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick a source rectangle and a rounded callout appears, showing that region magnified, joined to its source by a tapered pointer that grows out of the callout's edge as if it were part of the same shape. Save the result as a flat PNG.
 
+![A HawkEye magnifier callout: a story thumbnail on a news page magnified into a rounded callout, joined to its source by a tapered pointer, outlined in an auto-chosen blue that contrasts with the dark image behind it.](screenshots/hawkeye-example-callout.jpg)
+
 ## Two entry points
 
 - **Hotkey** — by default `⌃⌥⇧⌘H` (Hyper-H). Grabs the active display (the one with the pointer on it) via ScreenCaptureKit and opens the editor.
@@ -23,7 +25,7 @@ A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick
 
 The action bar at the bottom of the editor window:
 
-- **Arrow colour** — system colour picker. Drives the wedge fill, the selection marquee, and the resize-handle rings so the annotation reads as one palette. Live (continuous) update.
+- **Arrow colour** — **Auto** (the default) derives an accent that contrasts with the background behind the callout — a light accent on dark scenes, a deeper one on light, a complementary hue on colourful content — so the annotation stays legible without being gaudy, and re-derives as you move the callout to a different part of the image. Switch Auto off to pick your own from the system colour well. Either way the colour drives the wedge fill, the **callout border**, the selection marquee, and the resize-handle rings so the annotation reads as one palette. Live (continuous) update.
 - **Thickness** — slider, 2–24 image-pixels. Controls the pointer's base width.
 - **Reset** — clears selection, callout, and any user-positioned pointer tip.
 - **Save Image…** (`⌘S`) — flatten and write.
