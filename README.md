@@ -4,6 +4,8 @@ A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick
 
 ![A HawkEye magnifier callout: a story thumbnail on a news page magnified into a rounded callout, joined to its source by a tapered pointer, outlined in an auto-chosen blue that contrasts with the dark image behind it.](screenshots/hawkeye-example-callout.jpg)
 
+*Photo by [Tobias Reich](https://unsplash.com/@electerious?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText) on [Unsplash](https://unsplash.com/photos/a-person-walks-on-a-foggy-illuminated-bridge-at-dusk-VjfE3c9Y5ck?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)*
+
 ## Two entry points
 
 - **Hotkey** — by default `⌃⌥⇧⌘H` (Hyper-H). Grabs the active display (the one with the pointer on it) via ScreenCaptureKit and opens the editor.
