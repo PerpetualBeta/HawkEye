@@ -12,19 +12,17 @@ struct HawkEyeSettings: View {
 
     @AppStorage("HawkEye.hudEnabled") private var hudEnabled: Bool = true
 
-    /// CGPreflightScreenCaptureAccess flips immediately when the user
-    /// grants Screen Recording in System Settings, but SwiftUI doesn't
-    /// see the change without a redraw trigger. Re-poll on appear so
-    /// returning to the Settings window after granting refreshes the
-    /// indicator without a relaunch.
-    @State private var screenRecordingGranted: Bool = CGPreflightScreenCaptureAccess()
+    /// Kept current by JorvikKit. Screen Recording has no system announcement, so unlike
+    /// Accessibility it is the once-a-second re-read that does the work — see
+    /// `JorvikPermissionWatcher`.
+    @StateObject private var screenRecording = JorvikPermissionWatcher.screenRecording()
 
     var body: some View {
         Section("Permissions") {
             HStack {
                 Text("Screen Recording")
                 Spacer()
-                if screenRecordingGranted {
+                if screenRecording.isGranted {
                     Label("Granted", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.caption)
@@ -35,11 +33,9 @@ struct HawkEyeSettings: View {
                         // returns false, so also nudge the user toward
                         // the Settings pane where they'd actually flip it.
                         _ = CGRequestScreenCaptureAccess()
-                        screenRecordingGranted = CGPreflightScreenCaptureAccess()
-                        if !screenRecordingGranted {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                                NSWorkspace.shared.open(url)
-                            }
+                        screenRecording.reread()
+                        if !screenRecording.isGranted {
+                            JorvikPermissionWatcher.openSettings(pane: .screenRecording)
                         }
                     }
                     .font(.caption)
@@ -64,9 +60,6 @@ struct HawkEyeSettings: View {
 
         Section("Behaviour") {
             Toggle("Show feedback HUD", isOn: $hudEnabled)
-        }
-        .onAppear {
-            screenRecordingGranted = CGPreflightScreenCaptureAccess()
         }
 
         // Debug logging is a power-user knob, not for the Settings UI.
