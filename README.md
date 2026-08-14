@@ -68,9 +68,13 @@ No network. No telemetry. Screen Recording (when used) hits a single display via
 ## Build
 
 ```
-make dev-build   # arm64, Developer ID signed, Sparkle embedded
-make run         # build, kill any running instance, open the bundle
-make icon        # regenerate Resources/AppIcon.icns from generate_icon.swift
+brew install make   # GNU Make 4+, if you do not already have gmake
+git clone https://github.com/PerpetualBeta/jorvik-release.git
+git clone https://github.com/PerpetualBeta/HawkEye.git
+cd HawkEye
+gmake dev-build   # arm64, Developer ID signed, Sparkle embedded
+gmake run         # build, kill any running instance, open the bundle
+gmake icon        # regenerate Resources/AppIcon.icns from generate_icon.swift
 ```
 
 Requires the shared [`jorvik-release`](https://github.com/PerpetualBeta/jorvik-release) Make include at `../jorvik-release/release.mk`.
