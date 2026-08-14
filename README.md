@@ -6,6 +6,19 @@ A macOS menu-bar utility that adds a magnifier callout to an image. Drag to pick
 
 *Photo by [Tobias Reich](https://unsplash.com/@electerious?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText) on [Unsplash](https://unsplash.com/photos/a-person-walks-on-a-foggy-illuminated-bridge-at-dusk-VjfE3c9Y5ck?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)*
 
+## Installation
+
+Two formats on every release — both signed and notarised, pick whichever suits:
+
+- **[Installer (`.pkg`)](https://github.com/PerpetualBeta/HawkEye/releases/latest/download/HawkEye.pkg)** — recommended for first-time installs. Double-click to run; macOS Installer places the app in `/Applications` without quarantine or App Translocation.
+- **[Download (`.zip`)](https://github.com/PerpetualBeta/HawkEye/releases/latest)** — unzip and drag `HawkEye.app` to your Applications folder.
+
+Or install it with [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask perpetualbeta/jorvik/jorvik-hawkeye
+```
+
 ## Two entry points
 
 - **Hotkey** — by default `⌃⌥⇧⌘H` (Hyper-H). Grabs the active display (the one with the pointer on it) via ScreenCaptureKit and opens the editor.
