@@ -21,8 +21,8 @@ brew install --cask perpetualbeta/jorvik/jorvik-hawkeye
 
 ## Two entry points
 
-- **Hotkey** — by default `⌃⌥⇧⌘H` (Hyper-H). Grabs the active display (the one with the pointer on it) via ScreenCaptureKit and opens the editor.
-- **Load Image…** — from the menu-bar pop-down (`⌘O` while the menu is open). Opens an existing PNG / JPEG / TIFF / HEIC and feeds it into the same editor.
+- **Hotkey** — by default `control` `option` `shift` `command` `H` (Hyper-H). Grabs the active display (the one with the pointer on it) via ScreenCaptureKit and opens the editor.
+- **Load Image…** — from the menu-bar pop-down (`command` `O` while the menu is open). Opens an existing PNG / JPEG / TIFF / HEIC and feeds it into the same editor.
 
 ## In the editor
 
@@ -33,8 +33,8 @@ brew install --cask perpetualbeta/jorvik/jorvik-hawkeye
 - Drag the source rectangle's body or corners to retarget — the callout re-magnifies, and its aspect snaps to match.
 - Drag the **pointer tip** to retarget the wedge at any point in the image; the tail rotates automatically to exit the callout from whichever side faces the tip. The selection marquee + handles fade out while you're placing the tip so nothing obstructs your aim.
 - Click in empty image space without dragging is a no-op — your existing annotation isn't destroyed. Drag with motion to start a fresh selection.
-- Press **Escape** (or `⌘.`) to clear the current annotation and start over.
-- **Save Image…** (`⌘S`) writes a flat PNG at the source image's native pixel resolution. The selection marquee is editor-only — it doesn't appear in the saved file.
+- Press `esc` (or `command` `.`) to clear the current annotation and start over.
+- **Save Image…** (`command` `S`) writes a flat PNG at the source image's native pixel resolution. The selection marquee is editor-only — it doesn't appear in the saved file.
 
 ## Editor controls
 
@@ -43,7 +43,7 @@ The action bar at the bottom of the editor window:
 - **Arrow colour** — **Auto** (the default) derives an accent that contrasts with the background behind the callout — a light accent on dark scenes, a deeper one on light, a complementary hue on colourful content — so the annotation stays legible without being gaudy, and re-derives as you move the callout to a different part of the image. Switch Auto off to pick your own from the system colour well. Either way the colour drives the wedge fill, the **callout border**, the selection marquee, and the resize-handle rings so the annotation reads as one palette. Live (continuous) update.
 - **Thickness** — slider, 2–24 image-pixels. Controls the pointer's base width.
 - **Reset** — clears selection, callout, and any user-positioned pointer tip.
-- **Save Image…** (`⌘S`) — flatten and write.
+- **Save Image…** (`command` `S`) — flatten and write.
 
 Both the colour and the thickness are persisted to `UserDefaults`, so the next time you open the editor you start with the same arrow settings.
 
