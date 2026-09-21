@@ -88,9 +88,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSettings() {
         JorvikSettingsView.showWindow(appName: "HawkEye") {
-            HawkEyeSettings(onHotkeyChanged: { [weak self] _ in
-                self?.registerCaptureHotkey()
-            })
+            HawkEyeSettings(
+                onHotkeyChanged: { [weak self] _ in
+                    self?.registerCaptureHotkey()
+                },
+                onRecordingChanged: { [weak self] recording in
+                    self?.hotkey.setRecordingSuspended(recording)
+                }
+            )
         }
     }
 

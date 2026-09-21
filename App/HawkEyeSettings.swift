@@ -10,6 +10,11 @@ struct HawkEyeSettings: View {
 
     let onHotkeyChanged: (HotkeyConfig) -> Void
 
+    /// Brings the app's Carbon hotkey down while the recorder is listening.
+    /// Without it, pressing the shortcut already set fires the capture instead
+    /// of being recorded, and the shortcut can never be changed.
+    let onRecordingChanged: (Bool) -> Void
+
     @AppStorage("HawkEye.hudEnabled") private var hudEnabled: Bool = true
 
     /// Kept current by JorvikKit. Screen Recording has no system announcement, so unlike
@@ -51,7 +56,8 @@ struct HawkEyeSettings: View {
         Section("Capture") {
             JorvikHotkeyRow(label: "Hotkey",
                             storageKey: HotkeyKeys.capture,
-                            onChange: onHotkeyChanged)
+                            onChange: onHotkeyChanged,
+                            onRecordingChanged: onRecordingChanged)
         }
 
         Section("Behaviour") {

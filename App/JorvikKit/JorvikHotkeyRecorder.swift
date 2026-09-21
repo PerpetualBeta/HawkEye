@@ -84,6 +84,11 @@ struct JorvikHotkeyRow: View {
     let storageKey: String
     var onChange: ((HotkeyConfig) -> Void)?
 
+    /// Forwarded to `JorvikShortcutRecorder`. Apps registering a Carbon hotkey
+    /// must unregister it while recording, or the shortcut already set fires the
+    /// action instead of being recorded.
+    var onRecordingChanged: ((Bool) -> Void)?
+
     @State private var config: HotkeyConfig = .empty
 
     var body: some View {
@@ -107,7 +112,8 @@ struct JorvikHotkeyRow: View {
             onClear: {
                 config = .empty
                 persist()
-            }
+            },
+            onRecordingChanged: { onRecordingChanged?($0) }
         )
         .onAppear { config = HotkeyStore.read(storageKey) }
     }
