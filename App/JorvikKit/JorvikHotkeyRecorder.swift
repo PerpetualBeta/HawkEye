@@ -64,127 +64,60 @@ enum HotkeyStore {
     }
 }
 
-// MARK: - SwiftUI recorder field
+// MARK: - The shortcut row
 
-/// SwiftUI-friendly recorder. Shows current shortcut as a glyph string
-/// (e.g. "⌃⌥⌘\"), or "Click to set" when empty. Click enters recording
-/// mode; the next keyDown with at least one modifier captures the
-/// shortcut. `onChange` fires whenever the stored value changes so the
-/// owner can re-register with HotkeyManager.
-struct HotkeyRecorderView: NSViewRepresentable {
+/// The estate's shortcut row, backed by `HotkeyStore`.
+///
+/// `JorvikShortcutRecorder` is the single recorder UI across every Jorvik app,
+/// and it is storage-agnostic: it binds a `keyCode`/`modifiers` pair. Apps that
+/// keep a `HotkeyConfig` under a storage key use this adapter rather than a
+/// second recorder, so all of them draw the same row.
+///
+/// This replaced `HotkeyRecorderView`, an `NSViewRepresentable` click-to-record
+/// field that four apps used while the other eight used `JorvikShortcutRecorder`
+/// — two components doing one job. The field's one capability the row lacked was
+/// clearing a shortcut, so `JorvikShortcutRecorder` gained an optional `onClear`
+/// and nothing was lost.
+struct JorvikHotkeyRow: View {
 
+    let label: String
     let storageKey: String
-    let onChange: (HotkeyConfig) -> Void
+    var onChange: ((HotkeyConfig) -> Void)?
 
-    func makeNSView(context: Context) -> HotkeyRecorderNSView {
-        HotkeyRecorderNSView(storageKey: storageKey, onChange: onChange)
-    }
+    @State private var config: HotkeyConfig = .empty
 
-    func updateNSView(_ nsView: HotkeyRecorderNSView, context: Context) {
-        nsView.refreshLabel()
-    }
-}
-
-final class HotkeyRecorderNSView: NSView {
-
-    private let storageKey: String
-    private let onChange: (HotkeyConfig) -> Void
-    private var label: NSTextField!
-    private var clearButton: NSButton!
-    private var monitor: Any?
-    private var recording = false {
-        didSet { refreshLabel() }
-    }
-
-    init(storageKey: String, onChange: @escaping (HotkeyConfig) -> Void) {
-        self.storageKey = storageKey
-        self.onChange = onChange
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 4
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.cgColor
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-
-        label = NSTextField(labelWithString: "")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.isEditable = false
-        label.isBordered = false
-        label.drawsBackground = false
-        label.alignment = .center
-        label.font = .systemFont(ofSize: 13)
-        addSubview(label)
-
-        clearButton = NSButton(title: "✕", target: self, action: #selector(clearShortcut))
-        clearButton.translatesAutoresizingMaskIntoConstraints = false
-        clearButton.bezelStyle = .accessoryBarAction
-        clearButton.isBordered = false
-        clearButton.font = .systemFont(ofSize: 11)
-        addSubview(clearButton)
-
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            clearButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            clearButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: clearButton.leadingAnchor, constant: -4),
-        ])
-        refreshLabel()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func mouseDown(with event: NSEvent) {
-        if !recording { startRecording() }
-    }
-
-    private func startRecording() {
-        recording = true
-        // Local monitor so we capture keys destined for our window
-        // (the settings window is key when the user clicks the field).
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
-            self?.handle(event: event)
-            return nil  // swallow — don't propagate to text fields etc.
-        }
-    }
-
-    private func handle(event: NSEvent) {
-        guard recording else { return }
-        // Ignore pure modifier presses; require a real keyCode.
-        if event.type == .flagsChanged { return }
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // Require at least one modifier — a bare letter is too easy
-        // to trigger accidentally.
-        guard !mods.intersection([.command, .option, .control, .shift]).isEmpty else { return }
-        let cfg = HotkeyConfig(keyCode: UInt16(event.keyCode), rawModifierFlags: mods.rawValue)
-        HotkeyStore.write(storageKey, cfg)
-        recording = false
-        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
-        onChange(cfg)
-    }
-
-    @objc private func clearShortcut() {
-        HotkeyStore.write(storageKey, .empty)
-        onChange(.empty)
-        refreshLabel()
-    }
-
-    func refreshLabel() {
-        if recording {
-            label.stringValue = "Press a shortcut…"
-            label.textColor = .secondaryLabelColor
-        } else {
-            let cfg = HotkeyStore.read(storageKey)
-            if cfg.isEmpty {
-                label.stringValue = "Click to set"
-                label.textColor = .secondaryLabelColor
-            } else {
-                label.stringValue = HotkeyFormatter.glyphs(for: cfg)
-                label.textColor = .labelColor
+    var body: some View {
+        JorvikShortcutRecorder(
+            label: label,
+            // Written separately by the recorder, so neither setter persists —
+            // `onChanged` fires once after both and is where the write happens.
+            keyCode: Binding(
+                get: { config.keyCode },
+                set: { config.keyCode = $0 }
+            ),
+            modifiers: Binding(
+                get: { config.modifierFlags },
+                set: { config.rawModifierFlags = $0.rawValue }
+            ),
+            // Empty string rather than a placeholder: the row hides its Clear
+            // button when there is no text, which is the behaviour wanted when
+            // there is no shortcut to clear.
+            displayString: { config.isEmpty ? "" : HotkeyFormatter.glyphs(for: config) },
+            onChanged: { persist() },
+            onClear: {
+                config = .empty
+                persist()
             }
-        }
+        )
+        .onAppear { config = HotkeyStore.read(storageKey) }
+    }
+
+    private func persist() {
+        HotkeyStore.write(storageKey, config)
+        onChange?(config)
     }
 }
+
 
 // MARK: - Formatters
 

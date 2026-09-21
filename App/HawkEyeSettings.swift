@@ -49,13 +49,9 @@ struct HawkEyeSettings: View {
         MenuBarVisibilitySettings()
 
         Section("Capture") {
-            HStack {
-                Text("Hotkey")
-                Spacer()
-                HotkeyRecorderView(storageKey: HotkeyKeys.capture,
-                                    onChange: onHotkeyChanged)
-                    .frame(width: 180, height: 24)
-            }
+            JorvikHotkeyRow(label: "Hotkey",
+                            storageKey: HotkeyKeys.capture,
+                            onChange: onHotkeyChanged)
         }
 
         Section("Behaviour") {
