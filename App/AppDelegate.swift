@@ -3,7 +3,7 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: StatusItem?
-    private var hotkey: HotkeyManager!
+    private var hotkey: JorvikHotkeyManager!
     private var capture: CaptureCoordinator!
     private var sparkleDelegate: SparkleDelegate?
 
@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.applyStatusItemVisibility()
         }
 
-        hotkey = HotkeyManager()
+        hotkey = JorvikHotkeyManager(signature: JorvikHotkeyManager.hawkEyeSignature)
         registerCaptureHotkey()
     }
 
