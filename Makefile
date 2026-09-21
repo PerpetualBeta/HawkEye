@@ -18,7 +18,7 @@ ALSO_SHIP_PKG    := true
 SWIFT_FRAMEWORKS := Cocoa CoreGraphics ScreenCaptureKit Carbon ServiceManagement UniformTypeIdentifiers
 SWIFT_SOURCES    := App/main.swift App/AppDelegate.swift \
                     App/StatusItem.swift \
-                    App/HotkeyManager.swift App/HotkeyRecorder.swift \
+                    App/HotkeyDefault.swift App/HotkeyManager.swift \
                     App/CaptureCoordinator.swift \
                     App/Screenshot.swift App/ImageLoader.swift App/ImageSaver.swift \
                     App/EditorWindow.swift App/EditorCanvas.swift App/CalloutGeometry.swift \

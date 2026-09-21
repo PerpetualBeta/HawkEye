@@ -1,3 +1,25 @@
+//  JorvikHotkeyRecorder.swift — canonical JorvikKit
+//
+//  The global-hotkey subsystem: a value type, its persistence, its display
+//  formatting, the key-name tables, and the SwiftUI recorder field.
+//
+//  Promoted into JorvikKit on 2026-09-21. It had been hand-rolled four times —
+//  ASCII Saver and Rainy Day shared one 206-line copy, HawkEye had 275 and
+//  CopyLens 312, the latter two adding menu key equivalents. This is CopyLens's
+//  version, which was the fullest and the best documented, with its app-specific
+//  seed shortcut taken out. Each app keeps its own default; that is a product
+//  decision, not shared infrastructure.
+//
+//  NOT to be confused with JorvikShortcutRecorder, which is a different and much
+//  smaller thing: a recording *view* that hands the caller a shortcut and owns
+//  no storage. Fourteen apps use that one and supply their own persistence. The
+//  four that used this one get the whole subsystem instead, which is why they
+//  were never migrated to the other.
+//
+//  Type names are deliberately unprefixed — HotkeyConfig, HotkeyStore,
+//  HotkeyRecorderView — so that promoting the file changed no call site in any
+//  of the four apps.
+
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
@@ -5,9 +27,12 @@ import Carbon.HIToolbox
 // MARK: - HotkeyConfig + persistence
 
 /// A keyboard-shortcut value: a keyCode + a set of NSEvent modifier
-/// flags. Persisted to UserDefaults as JSON. Empty = unset.
+/// flags. Persisted to UserDefaults as JSON. Empty = unset (no hotkey
+/// registered).
 struct HotkeyConfig: Codable, Equatable {
     var keyCode: UInt16
+    /// Stored as the raw `NSEvent.ModifierFlags` bitfield. Translated
+    /// to Carbon flags by `HotkeyManager` at registration time.
     var rawModifierFlags: UInt
 
     static let empty = HotkeyConfig(keyCode: 0, rawModifierFlags: 0)
@@ -18,15 +43,11 @@ struct HotkeyConfig: Codable, Equatable {
             .intersection(.deviceIndependentFlagsMask)
     }
 
-    /// Hyper-H — the seed default: Cmd+Ctrl+Opt+Shift+H. "H" for HawkEye,
-    /// and a deliberate departure from CopyLens's "\" so a user running
-    /// both doesn't see one swallow the other.
-    static let defaultCapture = HotkeyConfig(
-        keyCode: UInt16(kVK_ANSI_H),
-        rawModifierFlags: NSEvent.ModifierFlags([.command, .control, .option, .shift]).rawValue
-    )
 }
 
+/// UserDefaults persistence for `HotkeyConfig`. Each hotkey slot has its
+/// own key. Returns `.empty` when the key isn't present so the caller can
+/// substitute a default.
 enum HotkeyStore {
     static func read(_ key: String) -> HotkeyConfig {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -45,6 +66,11 @@ enum HotkeyStore {
 
 // MARK: - SwiftUI recorder field
 
+/// SwiftUI-friendly recorder. Shows current shortcut as a glyph string
+/// (e.g. "⌃⌥⌘\"), or "Click to set" when empty. Click enters recording
+/// mode; the next keyDown with at least one modifier captures the
+/// shortcut. `onChange` fires whenever the stored value changes so the
+/// owner can re-register with HotkeyManager.
 struct HotkeyRecorderView: NSViewRepresentable {
 
     let storageKey: String
@@ -114,16 +140,21 @@ final class HotkeyRecorderNSView: NSView {
 
     private func startRecording() {
         recording = true
+        // Local monitor so we capture keys destined for our window
+        // (the settings window is key when the user clicks the field).
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             self?.handle(event: event)
-            return nil
+            return nil  // swallow — don't propagate to text fields etc.
         }
     }
 
     private func handle(event: NSEvent) {
         guard recording else { return }
+        // Ignore pure modifier presses; require a real keyCode.
         if event.type == .flagsChanged { return }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        // Require at least one modifier — a bare letter is too easy
+        // to trigger accidentally.
         guard !mods.intersection([.command, .option, .control, .shift]).isEmpty else { return }
         let cfg = HotkeyConfig(keyCode: UInt16(event.keyCode), rawModifierFlags: mods.rawValue)
         HotkeyStore.write(storageKey, cfg)
@@ -157,6 +188,7 @@ final class HotkeyRecorderNSView: NSView {
 
 // MARK: - Formatters
 
+/// Formats a HotkeyConfig as the standard glyph string (⌃⌥⇧⌘K).
 enum HotkeyFormatter {
     static func glyphs(for cfg: HotkeyConfig) -> String {
         var s = ""
@@ -170,7 +202,17 @@ enum HotkeyFormatter {
     }
 }
 
+// MARK: - NSMenuItem key-equivalent mapping
+
 extension HotkeyConfig {
+    /// `(keyEquivalent, modifierMask)` suitable for an `NSMenuItem`, or
+    /// `nil` if the config is empty or the keyCode has no displayable
+    /// character (e.g. Caps Lock). The menu item draws the standard
+    /// "⌃⌥⇧⌘x" glyph string on the right edge from these values.
+    ///
+    /// Status-item menus only intercept their key-equivalents while the
+    /// menu is open, so this is purely cosmetic — the global Carbon
+    /// hotkey is what actually fires the capture.
     var menuKeyEquivalent: (key: String, modifiers: NSEvent.ModifierFlags)? {
         guard !isEmpty else { return nil }
         guard let key = MenuKeyEquivalent.character(for: keyCode) else { return nil }
@@ -178,6 +220,15 @@ extension HotkeyConfig {
     }
 }
 
+/// Virtual keyCode → string suitable for `NSMenuItem.keyEquivalent`.
+/// Returns nil for keyCodes that have no sensible menu representation.
+///
+/// Distinct from `KeyCodeNames` because the menu wants the *character*
+/// (lowercase letters, the actual punctuation symbol, or the Unicode
+/// scalar that AppKit reserves for arrows/function keys), not the
+/// human-display name. Kept narrow on purpose: the recorder already
+/// rejects keystrokes without a modifier, so the keyCodes that reach
+/// here are the same set users actually pick for shortcuts.
 enum MenuKeyEquivalent {
     static func character(for keyCode: UInt16) -> String? {
         switch Int(keyCode) {
@@ -231,6 +282,9 @@ enum MenuKeyEquivalent {
     }
 }
 
+/// Best-effort mapping from virtual key codes to display strings.
+/// Covers the keys most people will pick for shortcuts; falls back
+/// to "Key N" for anything obscure.
 enum KeyCodeNames {
     static func name(for keyCode: UInt16) -> String {
         switch Int(keyCode) {
