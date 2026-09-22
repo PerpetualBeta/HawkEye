@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Settings & About windows
 
     private func openSettings() {
-        JorvikSettingsView.showWindow(appName: "HawkEye") {
+        JorvikSettingsView.showWindow(appName: "HawkEye") { [weak self] in
             HawkEyeSettings(
                 onHotkeyChanged: { [weak self] _ in
                     self?.registerCaptureHotkey()
