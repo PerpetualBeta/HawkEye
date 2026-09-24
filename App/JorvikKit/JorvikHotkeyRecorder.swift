@@ -216,6 +216,14 @@ enum MenuKeyEquivalent {
         case kVK_F10: return String(format: "%C", NSF10FunctionKey)
         case kVK_F11: return String(format: "%C", NSF11FunctionKey)
         case kVK_F12: return String(format: "%C", NSF12FunctionKey)
+        case kVK_F13: return String(format: "%C", NSF13FunctionKey)
+        case kVK_F14: return String(format: "%C", NSF14FunctionKey)
+        case kVK_F15: return String(format: "%C", NSF15FunctionKey)
+        case kVK_F16: return String(format: "%C", NSF16FunctionKey)
+        case kVK_F17: return String(format: "%C", NSF17FunctionKey)
+        case kVK_F18: return String(format: "%C", NSF18FunctionKey)
+        case kVK_F19: return String(format: "%C", NSF19FunctionKey)
+        case kVK_F20: return String(format: "%C", NSF20FunctionKey)
         default: return nil
         }
     }
@@ -255,6 +263,11 @@ enum KeyCodeNames {
         case kVK_F4: return "F4"; case kVK_F5: return "F5"; case kVK_F6: return "F6"
         case kVK_F7: return "F7"; case kVK_F8: return "F8"; case kVK_F9: return "F9"
         case kVK_F10: return "F10"; case kVK_F11: return "F11"; case kVK_F12: return "F12"
+        // F13 to F20 can be recorded on their own, with no modifier, so they
+        // must have names. Without these they drew as "Key 105" and similar.
+        case kVK_F13: return "F13"; case kVK_F14: return "F14"; case kVK_F15: return "F15"
+        case kVK_F16: return "F16"; case kVK_F17: return "F17"; case kVK_F18: return "F18"
+        case kVK_F19: return "F19"; case kVK_F20: return "F20"
         case kVK_Space: return "Space"
         case kVK_Return: return "↩"
         case kVK_Tab: return "⇥"
